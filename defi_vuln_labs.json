@@ -1,0 +1,1361 @@
+{
+  "metadata": {
+    "source": "DeFiVulnLabs",
+    "description": "Ground truth file documenting all vulnerabilities in the DeFiVulnLabs repository",
+    "version": "1.0",
+    "last_updated": "2024",
+    "total_vulnerabilities": 48
+  },
+  "vulnerabilities": [
+    {
+      "id": "integer_overflow_1",
+      "name": "Integer Overflow 1",
+      "category": "vulnerability",
+      "description": "In previous versions of Solidity (prior Solidity 0.8.x) an integer would automatically roll-over to a lower or higher number. Without SafeMath (prior Solidity 0.8.x), the TimeLock contract has a flaw that allows an attacker to prematurely withdraw their deposited funds by causing an overflow in the increaseLockTime function, which manipulates the lock time to wrap around to 0.",
+      "attack_scenarios": [
+        "Alice and Bob both deposit 1 Ether to TimeLock, they need to wait 1 week to unlock Ether. Bob causes an overflow on his lockTime by calling increaseLockTime with a value that causes overflow. Bob can withdraw 1 Ether because the lockTime is overflowed to 0, while Alice cannot withdraw because the lock time has not expired."
+      ],
+      "mitigations": [
+        "Use SafeMath library for Solidity < 0.8.0",
+        "Use Solidity 0.8.0 or later which has built-in overflow checking"
+      ],
+      "examples": [
+        {
+          "name": "TimeLock Overflow",
+          "file": "src/test/Overflow.sol",
+          "description": "TimeLock contract vulnerable to integer overflow in increaseLockTime function"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "integer_overflow_2",
+      "name": "Integer Overflow 2 - Token Whale",
+      "category": "vulnerability",
+      "description": "This contract demonstrates an integer underflow vulnerability in an ERC20 token contract. The vulnerability exists in the implementation of the transferFrom function. Due to the lack of automatic overflow checking in Solidity versions before 0.8.0, attackers can exploit this vulnerability to generate a large amount of tokens.",
+      "attack_scenarios": [
+        "Deployer transfers 800 tokens to Alice. Alice approves the attacker to spend 1000 tokens. Attacker uses transferFrom to transfer 500 tokens from Alice to Bob. Due to the lack of overflow checking in the _transfer function's subtraction operation, an underflow occurs when Alice's balance is insufficient, causing Alice's balance to become an extremely large number."
+      ],
+      "mitigations": [
+        "Use Solidity 0.8.0 or later which has built-in overflow checking",
+        "Use SafeMath library for older versions",
+        "Properly validate balances before transfers"
+      ],
+      "examples": [
+        {
+          "name": "TokenWhaleChallenge",
+          "file": "src/test/Overflow2.sol",
+          "description": "Token contract vulnerable to integer underflow in transferFrom function"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "selfdestruct_1",
+      "name": "Selfdestruct 1 - EtherGame",
+      "category": "vulnerability",
+      "description": "Due to missing or insufficient access controls, malicious parties can self-destruct the contract. The selfdestruct(address) function removes all bytecode from the contract address and sends all ether stored to the specified address. The EtherGame contract is vulnerable because it relies on this.balance to track deposited Ether, which can be manipulated through selfdestruct.",
+      "attack_scenarios": [
+        "Players deposit 1 Ether each. Attacker deploys Attack contract and calls dos() with 5 ether, which selfdestructs and sends ether to EtherGame. This breaks the game because the balance check fails and no one can become the winner."
+      ],
+      "mitigations": [
+        "Instead of relying on this.balance to track the deposited Ether, use a state variable to keep track of the total deposited amount"
+      ],
+      "examples": [
+        {
+          "name": "EtherGame",
+          "file": "src/test/Selfdestruct.sol",
+          "description": "EtherGame contract vulnerable to selfdestruct attack that breaks the game logic"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "selfdestruct_2",
+      "name": "Selfdestruct 2 - Force Ether Reception",
+      "category": "vulnerability",
+      "description": "Force implements neither receive nor fallback functions. Calls with any value will revert. However, contracts can be forced to receive ether without triggering any code using selfdestruct. This should be considered by contract developers to avoid breaking important invariants.",
+      "attack_scenarios": [
+        "An attacker can use a specially crafted contract to forcefully send ether using selfdestruct. The contract cannot block the reception of ether."
+      ],
+      "mitigations": [
+        "There is no way to block the reception of ether. The only mitigation is to avoid assuming how the balance of the contract increases and implement checks to handle this type of edge cases."
+      ],
+      "examples": [
+        {
+          "name": "Force",
+          "file": "src/test/Selfdestruct2.sol",
+          "description": "Demonstrates how selfdestruct can force ether into contracts without receive/fallback functions"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "unsafe_delegatecall",
+      "name": "Unsafe Delegatecall",
+      "category": "vulnerability",
+      "description": "This allows a smart contract to dynamically load code from a different address at runtime. The Proxy Contract Owner Manipulation Vulnerability allows an attacker to manipulate the owner of the Proxy contract through the use of delegatecall in the fallback function, which allows invoking functions from the Delegate contract within the context of the Proxy contract.",
+      "attack_scenarios": [
+        "Proxy Contract's owner is hardcoded as 0xdeadbeef. Attacker calls pwn() function through delegatecall, which changes the owner state variable of the Proxy contract to the attacker's address."
+      ],
+      "mitigations": [
+        "Avoid using delegatecall unless it is explicitly required",
+        "Ensure that the delegatecall is used securely",
+        "Validate and sanitize inputs to avoid unexpected behaviors"
+      ],
+      "examples": [
+        {
+          "name": "Proxy Delegatecall",
+          "file": "src/test/Delegatecall.sol",
+          "description": "Proxy contract vulnerable to owner manipulation through unsafe delegatecall"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "reentrancy",
+      "name": "Reentrancy",
+      "category": "vulnerability",
+      "description": "One of the major dangers of calling external contracts is that they can take over the control flow. The EtherStore Reentrancy Vulnerability allows an attacker to exploit reentrancy and withdraw more funds than they are entitled to. The vulnerability arises because Ether is transferred before updating the balance, allowing the attacker's contract to make a reentrant call back to withdrawFunds before the balance update.",
+      "attack_scenarios": [
+        "Attacker deposits 1 Ether. Attacker calls withdrawFunds(1 ether). The contract sends 1 ether to attacker, but before updating the balance, the attacker's receive() function calls withdrawFunds again, allowing multiple withdrawals and potentially draining all Ether from the contract."
+      ],
+      "mitigations": [
+        "Follow check-effects-interactions pattern",
+        "Use OpenZeppelin ReentrancyGuard modifier",
+        "Update all bookkeeping state variables before transferring execution to an external contract"
+      ],
+      "examples": [
+        {
+          "name": "EtherStore",
+          "file": "src/test/Reentrancy.sol",
+          "description": "EtherStore contract vulnerable to reentrancy attack in withdrawFunds function"
+        }
+      ],
+      "references": [
+        "https://slowmist.medium.com/introduction-to-smart-contract-vulnerabilities-reentrancy-attack-2893ec8390a",
+        "https://consensys.github.io/smart-contract-best-practices/attacks/reentrancy/"
+      ]
+    },
+    {
+      "id": "read_only_reentrancy",
+      "name": "Read-Only Reentrancy",
+      "category": "vulnerability",
+      "description": "An external call from a secure smart contract 'A' invokes the fallback() function in the attacker's contract. The attacker executes the code in the fallback() function to run against a target contract 'B', which is somehow indirectly related to contract 'A'. In the given example, Contract 'B' derives the price of the LP token from Contract 'A'.",
+      "attack_scenarios": [
+        "Attacker stakes LP tokens in VulnContract. Attacker calls remove_liquidity on Curve pool, which triggers receive() callback. During the callback, attacker calls getReward() which reads the virtual price from the pool. The virtual price is manipulated during the liquidity removal, allowing the attacker to get inflated rewards."
+      ],
+      "mitigations": [
+        "Avoid any state-changing operations within functions that are intended to be read-only",
+        "Use nonreentrant guards on read-only functions that interact with external protocols"
+      ],
+      "examples": [
+        {
+          "name": "Read-Only Reentrancy",
+          "file": "src/test/ReadOnlyReentrancy.sol",
+          "description": "VulnContract vulnerable to read-only reentrancy through Curve pool callbacks"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1590622114834706432",
+        "https://chainsecurity.com/heartbreaks-curve-lp-oracles/",
+        "https://medium.com/@zokyo.io/read-only-reentrancy-attacks-understanding-the-threat-to-your-smart-contracts-99444c0a7334"
+      ]
+    },
+    {
+      "id": "erc777_reentrancy",
+      "name": "ERC777 Reentrancy",
+      "category": "vulnerability",
+      "description": "ERC777 tokens allow arbitrary callbacks via hooks that are called during token transfers. Malicious contract addresses may cause reentrancy on such callbacks if reentrancy guards are not used.",
+      "attack_scenarios": [
+        "SimpleBank has a maximum claim limit of 1,000 tokens per address. Attacker registers tokensReceived hook. When claim() is called, it transfers tokens which triggers tokensReceived callback. In the callback, attacker calls claim() again before _mints is updated, bypassing the 1,000 token limit."
+      ],
+      "mitigations": [
+        "Follow check-effect-interaction pattern",
+        "Use OpenZeppelin ReentrancyGuard"
+      ],
+      "examples": [
+        {
+          "name": "SimpleBank ERC777",
+          "file": "src/test/ERC777-reentrancy.sol",
+          "description": "SimpleBank contract vulnerable to reentrancy through ERC777 tokensReceived hook"
+        }
+      ],
+      "references": [
+        "https://medium.com/cream-finance/c-r-e-a-m-finance-post-mortem-amp-exploit-6ceb20a630c5",
+        "https://quantstamp.com/blog/how-the-dforce-hacker-used-reentrancy-to-steal-25-million"
+      ]
+    },
+    {
+      "id": "unsafe_call",
+      "name": "Unchecked External Call - Call Injection",
+      "category": "vulnerability",
+      "description": "Use of low level 'call' should be avoided whenever possible. If the call data is controllable, it is easy to cause arbitrary function execution. The TokenWhale contract's approveAndCallcode function allows an arbitrary call to be executed with arbitrary data, leading to potential security risks.",
+      "attack_scenarios": [
+        "Attacker calls approveAndCallcode with _spender set to TokenWhaleContract address and _extraData containing transfer function call. The low-level call executes the transfer function, allowing attacker to transfer tokens from TokenWhaleContract to themselves."
+      ],
+      "mitigations": [
+        "Use of low level 'call' should be avoided whenever possible",
+        "Validate and sanitize all call data",
+        "Use specific function interfaces instead of generic call"
+      ],
+      "examples": [
+        {
+          "name": "TokenWhale",
+          "file": "src/test/UnsafeCall.sol",
+          "description": "TokenWhale contract vulnerable to arbitrary function execution through approveAndCallcode"
+        }
+      ],
+      "references": [
+        "https://blog.li.fi/20th-march-the-exploit-e9e1c5c03eb9"
+      ]
+    },
+    {
+      "id": "private_data",
+      "name": "Private Data Exposure",
+      "category": "vulnerability",
+      "description": "Private data ≠ Secure. It's readable from slots of the contract. Because the storage of each smart contract is public and transparent, and the content can be read through the corresponding slot in the specified contract address. Sensitive information is not recommended to be placed in smart contract programs.",
+      "attack_scenarios": [
+        "Vault contract stores a private password in slot 0. Attacker can read the password by accessing storage slot 0 directly using vm.load() or similar tools, as all contract storage is publicly readable on the blockchain."
+      ],
+      "mitigations": [
+        "Avoid storing sensitive data on-chain",
+        "Use encryption for sensitive data if it must be stored",
+        "Never store passwords or private keys in smart contracts"
+      ],
+      "examples": [
+        {
+          "name": "Vault",
+          "file": "src/test/Privatedata.sol",
+          "description": "Vault contract stores private password that can be read from storage slots"
+        }
+      ],
+      "references": [
+        "https://quillaudits.medium.com/accessing-private-data-in-smart-contracts-quillaudits-fe847581ce6d"
+      ]
+    },
+    {
+      "id": "unprotected_callback",
+      "name": "Unprotected Callback - ERC721 SafeMint Reentrancy",
+      "category": "vulnerability",
+      "description": "_safeMint is secure? Attacker can reenter the mint function inside the onERC721Received callback. The contract exploits a callback feature to bypass the maximum mint limit set by the MaxMint721 contract.",
+      "attack_scenarios": [
+        "MaxMint721 limits minting to MAX_PER_USER (10) tokens per user. Attacker implements onERC721Received callback. When _safeMint is called, it triggers onERC721Received callback. In the callback, attacker calls mint() again before balanceOf is updated, allowing minting more than the limit."
+      ],
+      "mitigations": [
+        "Follow check-effect-interaction pattern",
+        "Use OpenZeppelin ReentrancyGuard"
+      ],
+      "examples": [
+        {
+          "name": "MaxMint721",
+          "file": "src/test/Unprotected-callback.sol",
+          "description": "MaxMint721 contract vulnerable to reentrancy through ERC721 onERC721Received callback"
+        }
+      ],
+      "references": [
+        "https://blocksecteam.medium.com/when-safemint-becomes-unsafe-lessons-from-the-hypebears-security-incident-2965209bda2a",
+        "https://www.paradigm.xyz/2021/08/the-dangers-of-surprising-code"
+      ]
+    },
+    {
+      "id": "backdoor_assembly",
+      "name": "Hidden Backdoor in Contract",
+      "category": "vulnerability",
+      "description": "An attacker can manipulate smart contracts as a backdoor by writing inline assembly. Any sensitive parameters can be changed at any time. An apparently fair 'LotteryGame' contract is subtly designed to allow a hidden privilege to the contract deployer/administrator through the use of assembly level access to storage variables.",
+      "attack_scenarios": [
+        "LotteryGame appears to randomly pick a winner, but the pickWinner function uses assembly to set the winner. The referee() function uses assembly to load the admin value from storage slot 2. When admin calls pickWinner, it bypasses the safeCheck modifier and can set any address as the winner, allowing the admin to drain the prize pool."
+      ],
+      "mitigations": [
+        "Avoid using inline assembly unless absolutely necessary",
+        "Audit all assembly code carefully",
+        "Use proper access controls instead of hidden backdoors"
+      ],
+      "examples": [
+        {
+          "name": "LotteryGame",
+          "file": "src/test/Backdoor-assembly.sol",
+          "description": "LotteryGame contract has hidden backdoor using inline assembly to manipulate winner"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "bypass_contract_check",
+      "name": "Bypass isContract() Validation",
+      "category": "vulnerability",
+      "description": "The attacker only needs to write the code in the constructor of the smart contract to bypass the detection mechanism of whether it is a smart contract. This is because extcodesize returns 0 for contracts in construction, since the code is only stored at the end of the constructor execution.",
+      "attack_scenarios": [
+        "Target contract uses isContract() check to prevent contracts from calling protected() function. Attacker deploys Attack contract. In the constructor, extcodesize returns 0, so isContract() returns false. Attacker can call protected() from the constructor, bypassing the contract check."
+      ],
+      "mitigations": [
+        "Use tx.origin == msg.sender check instead of extcodesize",
+        "Use account.code.length > 0 for Solidity 0.5.0+",
+        "Don't rely solely on isContract() checks"
+      ],
+      "examples": [
+        {
+          "name": "Target",
+          "file": "src/test/Bypasscontract.sol",
+          "description": "Target contract's isContract() check can be bypassed by calling from constructor"
+        }
+      ],
+      "references": [
+        "https://www.infuy.com/blog/bypass-contract-size-limitations-in-solidity-risks-and-prevention/"
+      ]
+    },
+    {
+      "id": "dos",
+      "name": "Denial of Service",
+      "category": "vulnerability",
+      "description": "External calls can fail accidentally or deliberately, which can cause a DoS condition in the contract. The KingOfEther contract holds a game where a user can claim the throne by sending more Ether than the current balance. However, an attacker's contract can become the king and then make the fallback function revert or consume more than the stipulated gas limit, causing the claimThrone function to fail whenever the contract tries to return Ether to the last king.",
+      "attack_scenarios": [
+        "Alice claims throne with 1 ether. Bob claims throne with 2 ether, returning 1 ether to Alice. Attacker deploys Attack contract and claims throne with 3 ether. When next user tries to claim throne, the contract tries to return 2 ether to Attack contract, but Attack's fallback function reverts, causing the entire transaction to fail and DoS the game."
+      ],
+      "mitigations": [
+        "Use a Pull payment pattern - enable users to withdraw their Ether instead of sending it to them",
+        "Handle external call failures gracefully",
+        "Set gas limits on external calls"
+      ],
+      "examples": [
+        {
+          "name": "KingOfEther",
+          "file": "src/test/DOS.sol",
+          "description": "KingOfEther contract vulnerable to DoS attack through failing fallback function"
+        }
+      ],
+      "references": [
+        "https://slowmist.medium.com/intro-to-smart-contract-security-audit-dos-e23e9e901e26"
+      ]
+    },
+    {
+      "id": "randomness",
+      "name": "Predictable Randomness",
+      "category": "vulnerability",
+      "description": "Use of global variables like block hash, block number, block timestamp and other fields is insecure, miner and attacker can control it. GuessTheRandomNumber is a game where you win 1 Ether if you can guess the pseudo random number generated from block hash and timestamp.",
+      "attack_scenarios": [
+        "Contract generates random number using keccak256(abi.encodePacked(blockhash(block.number - 1), block.timestamp)). Attacker deploys Attack contract that computes the same random number using the same formula and calls guess() with the correct answer, winning the Ether."
+      ],
+      "mitigations": [
+        "Don't use blockhash and block.timestamp as source of randomness",
+        "Use commit-reveal schemes",
+        "Use Chainlink VRF or similar oracle-based randomness",
+        "Use Verifiable Delay Functions (VDFs)"
+      ],
+      "examples": [
+        {
+          "name": "GuessTheRandomNumber",
+          "file": "src/test/Randomness.sol",
+          "description": "GuessTheRandomNumber contract uses predictable randomness from block variables"
+        }
+      ],
+      "references": [
+        "https://solidity-by-example.org/hacks/randomness/"
+      ]
+    },
+    {
+      "id": "visibility",
+      "name": "Improper Access Control - Visibility",
+      "category": "vulnerability",
+      "description": "The default visibility of the function is Public. If there is an unsafe visibility setting, the attacker can directly call the sensitive function in the smart contract. The ownerGame contract has a changeOwner function that is intended to change the owner of the contract, but due to improper access control, this function is publicly accessible.",
+      "attack_scenarios": [
+        "ownerGame contract has changeOwner() function with public visibility but no access control modifier. Attacker can call changeOwner() with their own address, becoming the owner of the contract and gaining control over all owner-only functions."
+      ],
+      "mitigations": [
+        "Use access control modifiers such as onlyOwner",
+        "Always specify function visibility explicitly",
+        "Use OpenZeppelin AccessControl for complex access control needs"
+      ],
+      "examples": [
+        {
+          "name": "ownerGame",
+          "file": "src/test/Visibility.sol",
+          "description": "ownerGame contract has publicly accessible changeOwner function without access control"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "txorigin",
+      "name": "Insecure tx.origin - Phishing",
+      "category": "vulnerability",
+      "description": "tx.origin is a global variable in Solidity; using this variable for authentication in a smart contract makes the contract vulnerable to phishing attacks. Wallet is a simple contract where only the owner should be able to transfer Ether to another address, but Wallet.transfer() uses tx.origin to check that the caller is the owner.",
+      "attack_scenarios": [
+        "Alice deploys Wallet with 10 Ether. Eve deploys Attack contract and tricks Alice into calling Attack.attack(). Inside Attack.attack(), it calls Wallet.transfer() to transfer all funds to Eve. Since tx.origin in Wallet.transfer() is equal to Alice's address, it authorizes the transfer, and the wallet transfers all Ether to Eve."
+      ],
+      "mitigations": [
+        "It is advisable to use msg.sender instead of tx.origin",
+        "tx.origin should only be used for logging purposes, not for authorization"
+      ],
+      "examples": [
+        {
+          "name": "Wallet",
+          "file": "src/test/txorigin.sol",
+          "description": "Wallet contract uses tx.origin for authorization, vulnerable to phishing attacks"
+        }
+      ],
+      "references": [
+        "https://hackernoon.com/hacking-solidity-contracts-using-txorigin-for-authorization-are-vulnerable-to-phishing"
+      ]
+    },
+    {
+      "id": "uninitialized_variables",
+      "name": "Uninitialized State Variables",
+      "category": "vulnerability",
+      "description": "Uninitialized local storage variables may contain the value of other storage variables in the contract; this fact can cause unintentional vulnerabilities, or be exploited deliberately. In proxy patterns, if the implementation contract is not initialized, a malicious user can call initialize() to become the upgrader.",
+      "attack_scenarios": [
+        "Motorbike proxy contract uses Engine as implementation. Engine contract is not initialized through the proxy. Malicious user calls initialize() directly on Engine contract to become the upgrader. Attacker then calls upgradeToAndCall() to deploy a malicious contract that selfdestructs, destroying the implementation contract."
+      ],
+      "mitigations": [
+        "Always initialize implementation contracts in the constructor",
+        "Use initializer modifier to prevent re-initialization",
+        "Ensure proxy and implementation storage layouts are compatible"
+      ],
+      "examples": [
+        {
+          "name": "Motorbike",
+          "file": "src/test/Uninitialized_variables.sol",
+          "description": "Engine implementation contract not initialized, allowing attacker to become upgrader"
+        }
+      ],
+      "references": [
+        "https://blog.dixitaditya.com/ethernaut-level-25-motorbike"
+      ]
+    },
+    {
+      "id": "storage_collision",
+      "name": "Storage Collision 1",
+      "category": "vulnerability",
+      "description": "If variable's storage location is fixed and it happens that there is another variable that has the same index/offset of the storage location in the implementation contract, then there will be a storage collision. Both the Proxy and Logic contracts use the same storage slot (slot 0) to store important variables, namely the implementation address in the Proxy contract and the GuestAddress in the Logic contract.",
+      "attack_scenarios": [
+        "Proxy contract stores implementation address in slot 0. Logic contract stores GuestAddress in slot 0. When Proxy uses delegatecall to call Logic.foo(), it overwrites the implementation address in slot 0 with the GuestAddress value, causing the proxy to point to an incorrect implementation address."
+      ],
+      "mitigations": [
+        "Design the storage layout of the proxy and logic contracts to be consistent with each other",
+        "Use EIP-1967 storage slots for proxy patterns",
+        "Use storage gap pattern for upgradeable contracts"
+      ],
+      "examples": [
+        {
+          "name": "Proxy Storage Collision",
+          "file": "src/test/Storage-collision.sol",
+          "description": "Proxy and Logic contracts have storage collision in slot 0"
+        }
+      ],
+      "references": [
+        "https://blog.openzeppelin.com/proxy-patterns"
+      ]
+    },
+    {
+      "id": "storage_collision_audius",
+      "name": "Storage Collision 2 - Audius",
+      "category": "vulnerability",
+      "description": "We take Audius as an example. The TestProxy contract has proxyAdmin in slot 0, which collides with the Initializable contract's initialized and initializing booleans. Because the last byte of the proxyAdmin address can be interpreted as a truthy value, initialized was interpreted as a truthy value, causing the initializer() modifier to always succeed.",
+      "attack_scenarios": [
+        "TestProxy stores proxyAdmin in slot 0. Initializable contract stores initialized and initializing booleans in the same slot. When initialize() is called, the proxyAdmin address bytes are interpreted as booleans, causing the initializer modifier to always succeed, allowing unauthorized initialization."
+      ],
+      "mitigations": [
+        "Use EIP-1967 storage slots",
+        "Ensure proxy and implementation storage layouts don't collide",
+        "Use storage gap pattern"
+      ],
+      "examples": [
+        {
+          "name": "Audius Storage Collision",
+          "file": "src/test/Storage-collision-audio.sol",
+          "description": "Audius governance takeover due to storage collision between proxyAdmin and Initializable booleans"
+        }
+      ],
+      "references": [
+        "https://blog.audius.co/article/audius-governance-takeover-post-mortem-7-23-22"
+      ]
+    },
+    {
+      "id": "approval_scam",
+      "name": "Approval Scam",
+      "category": "vulnerability",
+      "description": "Most current scams use approve or setApprovalForAll to defraud your transfer rights. Be especially careful with this part. This vulnerability is associated with the approval process in ERC20 tokens where Alice approves Eve to transfer an unlimited (type(uint256).max) amount of tokens from Alice's account.",
+      "attack_scenarios": [
+        "Alice approves Eve to transfer an unlimited amount of tokens (type(uint256).max). Later, Eve exploits this permission and transfers 1000 tokens from Alice's account to hers, even though Alice may have only intended to approve a specific amount for a specific transaction."
+      ],
+      "mitigations": [
+        "Users should only approve the amount of tokens necessary for the operation at hand",
+        "Revoke approvals after use",
+        "Use permit() function with deadlines when possible",
+        "Be cautious when approving unknown contracts or addresses"
+      ],
+      "examples": [
+        {
+          "name": "Approval Scam",
+          "file": "src/test/ApproveScam.sol",
+          "description": "Demonstrates how unlimited approval can be exploited to steal tokens"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "signature_replay",
+      "name": "Signature Replay 1",
+      "category": "vulnerability",
+      "description": "Missing protection against signature replay attacks. Same signature can be used multiple times to execute a function. In this scenario, Alice signs a transaction that allows Bob to transfer tokens from Alice's account to Bob's account. Bob then replays this signature on multiple contracts, each time authorizing the transfer of tokens.",
+      "attack_scenarios": [
+        "Alice signs a transaction allowing Bob to transfer 499 tokens. Bob uses this signature on TokenWhale contract to transfer tokens. Bob then replays the same signature on SixEyeToken contract, which doesn't have proper nonce protection, allowing Bob to transfer tokens again using the same signature."
+      ],
+      "mitigations": [
+        "Replay attacks can be prevented by implementing a nonce, a number that is only used once, into the signing and verification process",
+        "Include chainId in the signature hash to prevent cross-chain replay",
+        "Include contract address in the signature hash to prevent cross-contract replay"
+      ],
+      "examples": [
+        {
+          "name": "Signature Replay",
+          "file": "src/test/SignatureReplay.sol",
+          "description": "TokenWhale and SixEyeToken contracts vulnerable to signature replay attacks"
+        }
+      ],
+      "references": [
+        "https://medium.com/cryptronics/signature-replay-vulnerabilities-in-smart-contracts-3b6f7596df57",
+        "https://medium.com/cypher-core/replay-attack-vulnerability-in-ethereum-smart-contracts-introduced-by-transferproxy-124bf3694e25"
+      ]
+    },
+    {
+      "id": "signature_replay_nba",
+      "name": "Signature Replay 2 - NBA",
+      "category": "vulnerability",
+      "description": "We use NBA NFT incident as an example. 'Association NFT' collection by the NBA triggers the 'Allow list' to sell out permanently. This vulnerability could've allowed any malicious entity to mint several NFTs without paying any tokens. This contract fails to verify that a signature can be used only once.",
+      "attack_scenarios": [
+        "Attacker copies a successful signature from a previous transaction on Etherscan. Attacker replays this signature multiple times in mint_approved() function, each time minting NFTs without paying, as the contract doesn't track which signatures have been used."
+      ],
+      "mitigations": [
+        "Track used signatures in a mapping",
+        "Include nonce in signature hash",
+        "Include user address and timestamp in signature"
+      ],
+      "examples": [
+        {
+          "name": "NBA NFT",
+          "file": "src/test/SignatureReplayNBA.sol",
+          "description": "NBA NFT contract vulnerable to signature replay, allowing unlimited free mints"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "data_location",
+      "name": "Data Location - Storage vs Memory",
+      "category": "vulnerability",
+      "description": "Incorrect use of storage slot and memory to save variable state can easily cause contracts to use values not updated for calculations. The function updaterewardDebt is updating the rewardDebt value of a UserInfo struct that is stored in memory. The issue is that this won't persist between function calls.",
+      "attack_scenarios": [
+        "Array contract's updaterewardDebt() function loads userInfo into memory, modifies it, but the changes don't persist because memory variables are cleared after the function execution. The storage value remains unchanged, causing incorrect calculations in subsequent operations."
+      ],
+      "mitigations": [
+        "Ensure the correct usage of memory and storage in the function parameters",
+        "Make all the locations explicit",
+        "Use storage reference when you need to modify persistent state"
+      ],
+      "examples": [
+        {
+          "name": "Array Data Location",
+          "file": "src/test/DataLocation.sol",
+          "description": "Array contract incorrectly uses memory instead of storage, causing updates to not persist"
+        }
+      ],
+      "references": [
+        "https://mudit.blog/cover-protocol-hack-analysis-tokens-minted-exploit/",
+        "https://www.educative.io/answers/storage-vs-memory-in-solidity"
+      ]
+    },
+    {
+      "id": "dirty_bytes",
+      "name": "Dirty Bytes",
+      "category": "vulnerability",
+      "description": "Copying bytes arrays from memory or calldata to storage is done in chunks of 32 bytes even if the length is not a multiple of 32. Thereby, extra bytes past the end of the array may be copied from calldata or memory to storage. These dirty bytes may then become observable after a .push() without arguments to the bytes array in storage.",
+      "attack_scenarios": [
+        "Constructor emits an event that writes to temporary memory. A bytes array of 63 bytes is created and assigned to storage. The byte after the 63 bytes allocated will contain dirty data (0x02) from the event emission. When push() is called, this dirty byte becomes visible in the array."
+      ],
+      "mitigations": [
+        "Fixed in Solidity 0.8.15",
+        "Use the new IR-based code generation pipeline",
+        "Be careful when copying variable-length arrays to storage"
+      ],
+      "examples": [
+        {
+          "name": "Dirtybytes",
+          "file": "src/test/Dirtybytes.sol",
+          "description": "Demonstrates dirty bytes issue when copying bytes arrays to storage (fixed in 0.8.15)"
+        }
+      ],
+      "references": [
+        "https://blog.soliditylang.org/2022/06/15/dirty-bytes-array-to-storage-bug/"
+      ]
+    },
+    {
+      "id": "invariant",
+      "name": "Invariant Issue",
+      "category": "vulnerability",
+      "description": "Assert is used to check invariants. Those are states our contract or variables should never reach, ever. The Invariant contract contains a receiveMoney function that accepts Ether and increments the sender's balance with the amount received. This balance is stored as an uint64, which can overflow.",
+      "attack_scenarios": [
+        "Contract stores balance as uint64, which can store a maximum of 2^64 - 1 (roughly 18.4467 Ether). If sender sends more Ether than the maximum, an overflow occurs, and the value rolls over to 0 and starts incrementing from there. As a result, the balance does not accurately reflect the amount of Ether received."
+      ],
+      "mitigations": [
+        "Ensure that the types you use for storing values are appropriately sized for the values they need to store",
+        "Use uint256 for token amounts to avoid overflow issues",
+        "Add checks to prevent overflow"
+      ],
+      "examples": [
+        {
+          "name": "Invariant",
+          "file": "src/test/Invariant.sol",
+          "description": "Invariant contract uses uint64 for balance, causing overflow when receiving large amounts"
+        }
+      ],
+      "references": [
+        "https://ethereum-blockchain-developer.com/027-exceptions/04-invariants-with-assert/"
+      ]
+    },
+    {
+      "id": "nft_metadata_exposure",
+      "name": "NFT Mint via Exposed Metadata",
+      "category": "vulnerability",
+      "description": "The contract is vulnerable to CVE-2022-38217, this could lead to the early disclosure of metadata of all NFTs in the project. As a result, attacker can find out valuable NFTs and then target mint of specific NFTs by monitoring mempool and sell the NFTs for a profit in secondary market. The issue is the metadata should be visible after the minting is completed.",
+      "attack_scenarios": [
+        "Attacker finds out that NFT#142 is a rare NFT by viewing metadata via IPFS before minting is complete. Attacker monitors the mempool until NFT#141 is minted, then immediately mints NFT#142, acquiring the rare NFT before others can."
+      ],
+      "mitigations": [
+        "Metadata should only be visible after minting is completed",
+        "Use commit-reveal scheme for metadata",
+        "Encrypt metadata until reveal phase"
+      ],
+      "examples": [
+        {
+          "name": "Fantastic Weslie",
+          "file": "src/test/NFTMint_exposedMetadata.sol",
+          "description": "NFT contract exposes metadata before minting, allowing attackers to target valuable NFTs"
+        }
+      ],
+      "references": [
+        "https://twitter.com/Supremacy_CA/status/1596176732729769985",
+        "https://medium.com/@Supremacy_Official/evilreveal-cve-2022-38217-a-nuclear-weapon-level-generic-vulnerability-buried-under-the-nft-5112724dabb"
+      ]
+    },
+    {
+      "id": "divide_multiply",
+      "name": "Precision Issues - Divide Before Multiply",
+      "category": "vulnerability",
+      "description": "Performing multiplication before division is generally better to avoid loss of precision because Solidity integer division might truncate. In the Miscalculation contract, the function price performs the division before the multiplication (price / 100) * discount. Due to the fact that Solidity truncates integers when dividing, the result of price / 100 will be 0 if the price is less than 100.",
+      "attack_scenarios": [
+        "Miscalculation contract calculates sale price as (price / 100) * discount. If price is 80 and discount is 90, the calculation becomes (80 / 100) * 90 = 0 * 90 = 0, resulting in incorrect pricing. The correct calculation should be (price * discount) / 100 = (80 * 90) / 100 = 72."
+      ],
+      "mitigations": [
+        "Always perform multiplication before division to avoid losing precision",
+        "Use higher precision arithmetic when possible",
+        "Round up instead of truncating when appropriate"
+      ],
+      "examples": [
+        {
+          "name": "Miscalculation",
+          "file": "src/test/Divmultiply.sol",
+          "description": "Miscalculation contract loses precision by dividing before multiplying"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1599774264437395461",
+        "https://blog.solidityscan.com/precision-loss-in-arithmetic-operations-8729aea20be9"
+      ]
+    },
+    {
+      "id": "unchecked_return_value",
+      "name": "Unchecked Return Value",
+      "category": "vulnerability",
+      "description": "Some tokens (like USDT) don't correctly implement the EIP20 standard and their transfer/transferFrom function return void instead of a success boolean. Calling these functions with the correct EIP20 function signatures will always revert.",
+      "attack_scenarios": [
+        "Contract tries to transfer USDT using standard ERC20 transfer() function that expects a boolean return value. USDT's transfer() function returns void, causing the call to revert even when the transfer would have succeeded."
+      ],
+      "mitigations": [
+        "Use OpenZeppelin's SafeERC20 library and change transfer to safeTransfer",
+        "Handle tokens that don't return values properly",
+        "Use low-level call for tokens with non-standard return values"
+      ],
+      "examples": [
+        {
+          "name": "USDT Transfer",
+          "file": "src/test/Returnvalue.sol",
+          "description": "USDT doesn't return boolean from transfer(), causing calls to revert"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1600868995007410176"
+      ]
+    },
+    {
+      "id": "no_revert_on_failure",
+      "name": "No Revert on Failure",
+      "category": "vulnerability",
+      "description": "Some tokens do not revert on failure but instead return false, for example, ZRX. If the transfer fails but the contract doesn't check the return value, it will continue execution as if the transfer succeeded.",
+      "attack_scenarios": [
+        "Contract calls ZRX transfer() function. If the transfer fails (e.g., insufficient balance), ZRX returns false instead of reverting. If the contract doesn't check the return value, it continues execution as if the transfer succeeded, leading to incorrect state."
+      ],
+      "mitigations": [
+        "Use OpenZeppelin's SafeERC20 library and change transfer to safeTransfer",
+        "Always check return values from token transfers",
+        "Use require() to check return values"
+      ],
+      "examples": [
+        {
+          "name": "ZRX Transfer",
+          "file": "src/test/Returnfalse.sol",
+          "description": "ZRX returns false on transfer failure instead of reverting"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "fee_on_transfer",
+      "name": "Incompatibility with Deflationary / Fee-on-Transfer Tokens",
+      "category": "vulnerability",
+      "description": "The actual deposited amount might be lower than the specified depositAmount of the function parameter. STA token had a deflationary model with transfer fee of 1% charged from a recipient. VulnVault contract doesn't account for this fee, leading to incorrect balance tracking.",
+      "attack_scenarios": [
+        "Alice approves VulnVault to spend 10000 STA tokens. Alice calls deposit(10000). VulnVault transfers 10000 STA from Alice, but due to 1% fee, only 9900 STA actually arrives in the vault. However, VulnVault records Alice's balance as 10000, causing accounting mismatch."
+      ],
+      "mitigations": [
+        "Transfer the tokens first and compare pre-/after token balances to compute the actual deposited amount",
+        "Check balance before and after transfer to get actual amount received",
+        "Document which tokens are supported (non-deflationary only)"
+      ],
+      "examples": [
+        {
+          "name": "VulnVault",
+          "file": "src/test/fee-on-transfer.sol",
+          "description": "VulnVault doesn't account for fee-on-transfer tokens, causing balance mismatches"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1671084918506684418",
+        "https://medium.com/1inch-network/balancer-hack-2020-a8f7131c980e"
+      ]
+    },
+    {
+      "id": "phantom_permit",
+      "name": "Phantom Function - Permit Function",
+      "category": "vulnerability",
+      "description": "Phantom function: Accepts any call to a function that it doesn't actually define, without reverting. Token that does not support EIP-2612 permit but has a fallback function. For example: WETH. When permit() is called on WETH, it falls through to the fallback function, which doesn't revert, making the call appear successful.",
+      "attack_scenarios": [
+        "VulnPermit contract calls permit() on WETH token. WETH doesn't implement permit(), so it falls through to the fallback function, which doesn't revert. The contract thinks permit() succeeded and proceeds to transferFrom(), which fails because no approval was actually granted, but the contract may have already performed other operations."
+      ],
+      "mitigations": [
+        "Use SafeERC20's safePermit - Revert on invalid signature",
+        "Check if token supports permit() before calling it",
+        "Verify the token actually implements EIP-2612"
+      ],
+      "examples": [
+        {
+          "name": "VulnPermit",
+          "file": "src/test/phantom-permit.sol",
+          "description": "VulnPermit contract vulnerable to phantom permit function on WETH"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1671347058568237057",
+        "https://media.dedaub.com/phantom-functions-and-the-billion-dollar-no-op-c56f062ae49f"
+      ]
+    },
+    {
+      "id": "first_deposit",
+      "name": "First Deposit Bug",
+      "category": "vulnerability",
+      "description": "First depositor can break minting of shares: The attack vector and impact is the same as TOB-YEARN-003, where users may not receive shares in exchange for their deposits if the total asset amount has been manipulated through a large 'donation'. This calculation issue arises because, in Solidity, if the pool token value for a user becomes less than 1, it is essentially rounded down to 0.",
+      "attack_scenarios": [
+        "Alice deposits 1 wei, gets 1 pool token. Alice transfers 1 ether to the pool, inflating the pool token price. Bob deposits 2 ether. Due to inflated price, Bob gets only 1 pool token (should get ~2). Alice withdraws and gets 1.5 ether, making a profit at Bob's expense."
+      ],
+      "mitigations": [
+        "Consider minting a minimal amount of pool tokens during the first deposit and sending them to zero address",
+        "Uniswap V2 solved this by sending the first 1000 LP tokens to the zero address",
+        "When totalSupply() == 0, send the first min liquidity LP tokens to the zero address to enable share dilution"
+      ],
+      "examples": [
+        {
+          "name": "SimplePool",
+          "file": "src/test/first-deposit.sol",
+          "description": "SimplePool vulnerable to first deposit manipulation attack"
+        }
+      ],
+      "references": [
+        "https://defihacklabs.substack.com/p/solidity-security-lesson-2-first",
+        "https://github.com/transmissions11/solmate/issues/178"
+      ]
+    },
+    {
+      "id": "empty_loop",
+      "name": "Empty Loop Issue",
+      "category": "vulnerability",
+      "description": "Due to insufficient validation, an attacker can simply pass an empty array to bypass the loop and signature verification. SimpleBank's withdraw() function iterates through signatures but doesn't check if the array is empty, allowing withdrawal without any signature verification.",
+      "attack_scenarios": [
+        "SimpleBank requires signature verification for withdrawals. Attacker calls withdraw() with an empty signatures array. The for loop doesn't execute (length is 0), so no signatures are verified, but the function continues and transfers 1 ether to the attacker."
+      ],
+      "mitigations": [
+        "Check the number of signatures: require(sigs.length > 0, 'No signatures provided')",
+        "Validate all input arrays before processing",
+        "Ensure empty arrays are handled correctly"
+      ],
+      "examples": [
+        {
+          "name": "SimpleBank",
+          "file": "src/test/empty-loop.sol",
+          "description": "SimpleBank allows withdrawal with empty signature array, bypassing verification"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1673195574215213057",
+        "https://dacian.me/exploiting-developer-assumptions#heading-unexpected-empty-inputs"
+      ]
+    },
+    {
+      "id": "unsafe_downcast",
+      "name": "Unsafe Downcasting",
+      "category": "vulnerability",
+      "description": "Downcasting from a larger integer type to a smaller one without checks can lead to unexpected behavior if the value of the larger integer is outside the range of the smaller one. This could lead to unexpected results due to overflow.",
+      "attack_scenarios": [
+        "SimpleBank's deposit() function downcasts uint256 amount to uint8 balance without checking. If amount is 257, it overflows to 1 when cast to uint8 (since uint8 max is 255), causing incorrect balance storage."
+      ],
+      "mitigations": [
+        "Make sure consistent uint256, or use OpenZeppelin SafeCast",
+        "Check that value fits in target type before downcasting",
+        "Use SafeCast.toUint8() or similar safe casting functions"
+      ],
+      "examples": [
+        {
+          "name": "SimpleBank",
+          "file": "src/test/unsafe-downcast.sol",
+          "description": "SimpleBank unsafely downcasts uint256 to uint8, causing overflow"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1673511868839886849",
+        "https://github.com/sherlock-audit/2022-10-union-finance-judging/issues/96"
+      ]
+    },
+    {
+      "id": "price_manipulation",
+      "name": "Price Manipulation",
+      "category": "vulnerability",
+      "description": "Incorrect price calculation over balanceOf, getReverse may refer to a situation where the price of a token or asset is not accurately calculated based on the balanceOf function. SimplePool's getPrice() function calculates price based on current token balances, which can be manipulated through flash loans.",
+      "attack_scenarios": [
+        "SimplePool has 1000 USDa and 1000 USDb, price is 1:1. Attacker uses flash loan to borrow 500 USDa, temporarily changing pool balance to 500 USDa and 1000 USDb, making price 1:2. Attacker exchanges 100 USDa at inflated price, receiving 200 USDb. Attacker repays flash loan, profiting from the manipulation."
+      ],
+      "mitigations": [
+        "Use a manipulation resistant oracle, Chainlink, TWAP, etc.",
+        "Don't rely solely on current balance for price calculation",
+        "Use time-weighted average price (TWAP) oracles"
+      ],
+      "examples": [
+        {
+          "name": "SimplePool",
+          "file": "src/test/Price_manipulation.sol",
+          "description": "SimplePool calculates price from current balances, vulnerable to flash loan manipulation"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1673948842738487296"
+      ]
+    },
+    {
+      "id": "ecrecover_zero",
+      "name": "ecrecover Returns address(0)",
+      "category": "vulnerability",
+      "description": "If v value isn't 27 or 28, ecrecover will return address(0). In the SimpleBank contract, the transfer function takes a message hash and a signature (v, r, s values) as inputs. It recovers the signer address and checks if it equals Admin (which defaults to address(0)).",
+      "attack_scenarios": [
+        "SimpleBank's transfer() function uses ecrecover to verify signatures. Admin is uninitialized (address(0)). Attacker provides invalid signature with v=29. ecrecover returns address(0), which matches Admin, allowing unauthorized transfer."
+      ],
+      "mitigations": [
+        "Verify that the result from ecrecover isn't 0",
+        "Use OpenZeppelin's ECDSA library",
+        "Check that v is 27 or 28 before calling ecrecover"
+      ],
+      "examples": [
+        {
+          "name": "SimpleBank",
+          "file": "src/test/ecrecover.sol",
+          "description": "SimpleBank doesn't check if ecrecover returns address(0), allowing bypass with invalid signature"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1674268926761668608"
+      ]
+    },
+    {
+      "id": "oracle_stale",
+      "name": "Oracle Stale Price",
+      "category": "vulnerability",
+      "description": "Oracle data feed is insufficiently validated. Chainlink price feed latestRoundData is used to retrieve price feed from chainlink. We need to make sure that the answer is not negative and price is not stale.",
+      "attack_scenarios": [
+        "Contract uses Chainlink oracle but doesn't check if the price is stale. If the oracle stops updating (e.g., due to network issues), the contract continues using the old price, which may be significantly different from the current market price, leading to incorrect calculations and potential losses."
+      ],
+      "mitigations": [
+        "latestAnswer function is deprecated. Instead, use the latestRoundData function to retrieve the price and make sure to add checks for stale data",
+        "Check answeredInRound >= roundId to ensure answer is not stale",
+        "Check updatedAt > 0 to ensure round is complete",
+        "Check answer > 0 to ensure valid feed answer"
+      ],
+      "examples": [
+        {
+          "name": "Chainlink Oracle",
+          "file": "src/test/Oracle-stale.sol",
+          "description": "Contract doesn't validate Chainlink oracle data, allowing stale prices"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1674611468975878144",
+        "https://code4rena.com/reports/2022-10-inverse#m-17-chainlink-oracle-data-feed-is-not-sufficiently-validated-and-can-return-stale-price"
+      ]
+    },
+    {
+      "id": "precision_loss",
+      "name": "Precision Loss - Rounded Down to Zero",
+      "category": "vulnerability",
+      "description": "Avoid any situation that if the numerator is smaller than the denominator, the result will be zero. Support all the ERC20 tokens, as those tokens may have different decimal places. For example, USDT and USDC have 6 decimals. So, in the calculations, one must be careful.",
+      "attack_scenarios": [
+        "SimplePool calculates reward as (totalDebt * _timeDelta) / (365 days * 1e18). If totalDebt is 10000e6 (USDC with 6 decimals) and _timeDelta is 1 second, the calculation becomes 10000000000 * 1 / 31536000000000000000000000 = 0 due to integer division truncation, resulting in zero rewards."
+      ],
+      "mitigations": [
+        "Avoid any situation that if the numerator is smaller than the denominator, the result will be zero",
+        "Using libraries for rounding up/down as expected",
+        "Requiring result is not zero or denominator is <= numerator",
+        "Refactor operations for avoiding first dividing then multiplying"
+      ],
+      "examples": [
+        {
+          "name": "SimplePool",
+          "file": "src/test/Precision-loss.sol",
+          "description": "SimplePool precision loss causes rewards to round down to zero"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1675805135061286914",
+        "https://dacian.me/precision-loss-errors#heading-rounding-down-to-zero"
+      ]
+    },
+    {
+      "id": "slippage_deadline",
+      "name": "Slippage - Incorrect Deadline & Slippage Amount",
+      "category": "vulnerability",
+      "description": "If both the slippage is set to 0 and there is no deadline, users might potentially lose all their tokens. Slippage is the difference between the expected price of a trade and the price at which the trade is executed. If hardcoded to 0, user will accept a minimum amount of 0 output tokens from the swap.",
+      "attack_scenarios": [
+        "User calls swapExactTokensForTokens with amountOutMin set to 0 and deadline set to type(uint256).max. Transaction gets stuck in mempool. By the time it's executed, market conditions have changed significantly. User receives 0 output tokens (or very few) due to no slippage protection, losing their input tokens."
+      ],
+      "mitigations": [
+        "Allow the user to specify the slippage & deadline value themselves",
+        "Never hardcode slippage to 0",
+        "Never hardcode deadline to max value",
+        "Validate that slippage and deadline are reasonable"
+      ],
+      "examples": [
+        {
+          "name": "Uniswap Swap",
+          "file": "src/test/Slippage-deadline.sol",
+          "description": "Swap with zero slippage and max deadline allows unfavorable execution"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1676118132992405505"
+      ]
+    },
+    {
+      "id": "hash_collisions",
+      "name": "abi.encodePacked() Hash Collisions",
+      "category": "vulnerability",
+      "description": "Using abi.encodePacked() with multiple variable length arguments can, in certain situations, lead to a hash collision. Hash functions are designed to be unique for each input, but collisions can still occur due to limitations in the hash function's size or the sheer number of possible inputs.",
+      "attack_scenarios": [
+        "HashCollisionBug contract uses keccak256(abi.encodePacked(_string1, _string2)) to create unique hashes. Strings 'AAA' + 'BBB' and 'AA' + 'ABBB' both encode to 'AAABBB', creating a hash collision. Attacker can use the second combination to overwrite the first deposit."
+      ],
+      "mitigations": [
+        "Use abi.encode() instead of abi.encodePacked()",
+        "Include length prefixes or separators in the encoding",
+        "Use a different hashing scheme that prevents collisions"
+      ],
+      "examples": [
+        {
+          "name": "HashCollisionBug",
+          "file": "src/test/Hash-collisions.sol",
+          "description": "HashCollisionBug vulnerable to hash collisions with abi.encodePacked()"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1676476475191750656",
+        "https://docs.soliditylang.org/en/v0.8.17/abi-spec.html?highlight=collisions#non-standard-packed-mode",
+        "https://swcregistry.io/docs/SWC-133"
+      ]
+    },
+    {
+      "id": "struct_deletion",
+      "name": "Struct Deletion Oversight",
+      "category": "vulnerability",
+      "description": "Incomplete struct deletion leaves residual data. If you delete a struct containing a mapping, the mapping won't be deleted. When delete myStructs[structId] is called, it only resets the id at mappingId to its default value 0, but the other flags in the mapping remain unchanged.",
+      "attack_scenarios": [
+        "StructDeletionBug contract has MyStruct containing a mapping. Attacker adds a struct with flags[10] = true. Attacker deletes the struct. The id is reset to 0, but flags[10] remains true. Attacker can still access the flag even though the struct was 'deleted'."
+      ],
+      "mitigations": [
+        "To fix this bug, you should delete the mapping inside the struct before deleting the struct itself",
+        "Iterate through mapping keys and delete them individually",
+        "Use a different data structure if mappings need to be deletable"
+      ],
+      "examples": [
+        {
+          "name": "StructDeletionBug",
+          "file": "src/test/Struct-deletion.sol",
+          "description": "StructDeletionBug doesn't properly delete mappings inside structs"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1676836264245592065",
+        "https://docs.soliditylang.org/en/develop/types.html"
+      ]
+    },
+    {
+      "id": "array_deletion",
+      "name": "Array Deletion Oversight",
+      "category": "vulnerability",
+      "description": "Incorrect array deletion leads to data inconsistency. When attempting to delete elements from an array, if the deletion process is not handled correctly, the array may still retain storage space and exhibit unexpected behavior. Using delete on an array element sets it to its default value but doesn't remove it from the array.",
+      "attack_scenarios": [
+        "ArrayDeletionBug has array [1, 2, 3, 4, 5]. Attacker calls deleteElement(1), which sets myArray[1] = 0 but doesn't remove it. Array becomes [1, 0, 3, 4, 5] with length still 5. This causes data inconsistency and incorrect array state."
+      ],
+      "mitigations": [
+        "Option 1: By copying the last element and placing it in the position to be removed, then pop()",
+        "Option 2: By shifting them from right to left, then pop()",
+        "Don't use delete on array elements if you want to remove them"
+      ],
+      "examples": [
+        {
+          "name": "ArrayDeletionBug",
+          "file": "src/test/Array-deletion.sol",
+          "description": "ArrayDeletionBug incorrectly deletes array elements, causing data inconsistency"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1677167550277509120",
+        "https://blog.solidityscan.com/improper-array-deletion-82672eed8e8d"
+      ]
+    },
+    {
+      "id": "gas_price_manipulation",
+      "name": "txGasPrice Manipulation",
+      "category": "vulnerability",
+      "description": "Manipulation of the txGasPrice value, which can result in unintended consequences and potential financial losses. In the calculateTotalFee function, the total fee is calculated by multiplying gasUsed + GAS_OVERHEAD_NATIVE with txGasPrice. The issue is that the txGasPrice value can be manipulated by an attacker.",
+      "attack_scenarios": [
+        "GasReimbursement contract calculates fee as (gasUsed + GAS_OVERHEAD_NATIVE) * tx.gasprice. Attacker sets a very high gas price when calling executeTransfer(). The contract reimburses the attacker with an inflated fee amount, allowing the attacker to profit from the gas price manipulation."
+      ],
+      "mitigations": [
+        "To address this vulnerability, it is recommended to implement safeguards such as using a gas oracle to obtain the average gas price from a trusted source",
+        "Cap the maximum gas price that can be used for fee calculation",
+        "Use a time-weighted average gas price"
+      ],
+      "examples": [
+        {
+          "name": "GasReimbursement",
+          "file": "src/test/gas-price.sol",
+          "description": "GasReimbursement vulnerable to gas price manipulation for fee calculation"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1678268482641870849"
+      ]
+    },
+    {
+      "id": "return_break",
+      "name": "Return vs Break",
+      "category": "vulnerability",
+      "description": "Use of return in inner loop iteration leads to unintended termination. When removing multiple banks from a list, using 'return' in the BuggyBankManager will prematurely exit the function after removing only the first bank, leaving other banks untouched.",
+      "attack_scenarios": [
+        "BuggyBankManager has 3 banks. Attacker calls removeBanksWithReturn() to remove all 3 banks. Function uses 'return' in inner loop, which exits the entire function after removing only the first bank. The other 2 banks remain in the list, causing incomplete deletion."
+      ],
+      "mitigations": [
+        "Use break instead of return when you only want to exit the current loop, not the entire function",
+        "Restructure code to avoid early returns in loops",
+        "Use continue to skip to next iteration instead of return"
+      ],
+      "examples": [
+        {
+          "name": "BuggyBankManager",
+          "file": "src/test/return-break.sol",
+          "description": "BuggyBankManager uses return in loop, causing premature function exit"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1678596730865221632",
+        "https://github.com/code-423n4/2022-03-lifinance-findings/issues/34"
+      ]
+    },
+    {
+      "id": "payable_transfer",
+      "name": "Incorrect Use of payable.transfer() or send()",
+      "category": "vulnerability",
+      "description": "Fixed 2300 gas, these shortcomings can make it impossible to successfully transfer ETH to the smart contract recipient. After the implementation of EIP 1884 in the Istanbul hard fork, the gas cost of the SLOAD operation was increased, resulting in the breaking of some existing smart contracts.",
+      "attack_scenarios": [
+        "SimpleBank uses transfer() to send Ether, which only provides 2300 gas. If recipient is a contract with a receive() function that performs operations requiring more than 2300 gas (e.g., updating storage, calling other contracts), the transfer will fail, causing DoS."
+      ],
+      "mitigations": [
+        "Using call with its returned boolean checked in combination with re-entrancy guard is highly recommended",
+        "Use call{value: amount}('') instead of transfer()",
+        "Always check the return value and handle failures appropriately"
+      ],
+      "examples": [
+        {
+          "name": "SimpleBank",
+          "file": "src/test/payable-transfer.sol",
+          "description": "SimpleBank uses transfer() which can fail for contracts requiring more than 2300 gas"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1678958093273829376",
+        "https://consensys.net/diligence/blog/2019/09/stop-using-soliditys-transfer-now/"
+      ]
+    },
+    {
+      "id": "nft_transfer",
+      "name": "Unauthorized NFT Transfer in Custom ERC721 Implementation",
+      "category": "vulnerability",
+      "description": "Custom transferFrom function in contract VulnerableERC721 does not properly check if msg.sender is the current owner of the token or an approved address. As a result, any address can call the transferFrom function to transfer any token, regardless of who the current owner is.",
+      "attack_scenarios": [
+        "VulnerableERC721 mints token 1 to Alice. Bob (not the owner) calls transferFrom(alice, bob, 1). The function doesn't check if Bob is authorized, so it directly calls _transfer(), successfully transferring the token from Alice to Bob without authorization."
+      ],
+      "mitigations": [
+        "To ensure that msg.sender is the current owner of the token or an approved address",
+        "Use _isApprovedOrOwner() modifier before _transfer()",
+        "Check owner, approval, and operator status before transferring"
+      ],
+      "examples": [
+        {
+          "name": "VulnerableERC721",
+          "file": "src/test/NFT-transfer.sol",
+          "description": "VulnerableERC721 doesn't check authorization in transferFrom, allowing unauthorized transfers"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1679120390281412609",
+        "https://blog.decurity.io/scanning-for-vulnerable-erc721-implementations-fe19200b91b5"
+      ]
+    },
+    {
+      "id": "self_transfer",
+      "name": "Missing Check for Self-Transfer Allows Funds to be Lost",
+      "category": "vulnerability",
+      "description": "The vulnerability in the code stems from the absence of a check to prevent self-transfers. This oversight allows the transfer function to erroneously transfer funds to the same address. Consequently, funds are lost as the code fails to deduct the transferred amount from the sender's balance correctly.",
+      "attack_scenarios": [
+        "SimpleBank has transfer() function that doesn't check if _from == _to. Attacker calls transfer(address(this), address(this), 10000) twice. Each call subtracts 10000 from balance and adds 10000 to balance. Since it's the same address, the balance effectively increases by 10000 each time, allowing attacker to create tokens out of thin air."
+      ],
+      "mitigations": [
+        "Add condition to prevent transfer between same addresses: require(_from != _to, 'Cannot transfer funds to the same address.')",
+        "Check sender and recipient are different before processing transfer"
+      ],
+      "examples": [
+        {
+          "name": "SimpleBank",
+          "file": "src/test/self-transfer.sol",
+          "description": "SimpleBank doesn't prevent self-transfers, allowing balance manipulation"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1679373800327241728",
+        "https://github.com/code-423n4/2022-10-traderjoe-findings/issues/299"
+      ]
+    },
+    {
+      "id": "recover_erc20",
+      "name": "Incorrect Implementation of recoverERC20() Function",
+      "category": "vulnerability",
+      "description": "The recoverERC20() function in StakingRewards.sol can potentially serve as a backdoor for the owner to retrieve rewardsToken. There is no corresponding check against the rewardsToken. This creates an administrative privilege where the owner can sweep the rewards tokens, potentially using it as a means to exploit depositors.",
+      "attack_scenarios": [
+        "VulnStakingRewards contract has recoverERC20() function that allows owner to recover any ERC20 token. Alice transfers reward tokens to the contract. Owner calls recoverERC20() to withdraw the reward tokens, effectively stealing the rewards that should go to stakers."
+      ],
+      "mitigations": [
+        "Disallowing recovery of the rewardToken within the recoverErc20 function",
+        "Add check: require(tokenAddress != address(rewardsToken), 'Cannot withdraw the rewardsToken')",
+        "Whitelist recoverable tokens"
+      ],
+      "examples": [
+        {
+          "name": "VulnStakingRewards",
+          "file": "src/test/recoverERC20.sol",
+          "description": "VulnStakingRewards allows owner to recover reward tokens, creating a backdoor"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1680806251482189824",
+        "https://blog.openzeppelin.com/across-token-and-token-distributor-audit#anyone-can-prevent-stakers-from-getting-their-rewards"
+      ]
+    },
+    {
+      "id": "flashloan_flaw",
+      "name": "Missing Flash Loan Initiator Check",
+      "category": "vulnerability",
+      "description": "Missing flash loan initiator check refers to a potential security vulnerability in a flash loan implementation where the initiator of the flash loan is not properly verified or checked. Anyone could exploit the flash loan functionality and set the receiver address to a vulnerable protocol, allowing manipulation of balances, opening trades, draining funds, or carrying out other malicious actions.",
+      "attack_scenarios": [
+        "LendingPool has flashLoan() function that doesn't verify the initiator. SimpleBankBug contract calls flashLoan() with receiverAddress set to itself. In executeOperation(), the contract doesn't check if _initiator == address(this), allowing the flash loan to be used by unauthorized parties to manipulate vulnerable protocols."
+      ],
+      "mitigations": [
+        "Check the initiator of the flash loan and revert if the initiator is not authorized",
+        "Require _initiator == address(this) in executeOperation()",
+        "Maintain a whitelist of authorized flash loan receivers"
+      ],
+      "examples": [
+        {
+          "name": "LendingPool",
+          "file": "src/test/Flashloan-flaw.sol",
+          "description": "LendingPool doesn't verify flash loan initiator, allowing unauthorized usage"
+        }
+      ],
+      "references": [
+        "https://twitter.com/ret2basic/status/1681150722434551809",
+        "https://github.com/sherlock-audit/2023-05-dodo-judging/issues/34"
+      ]
+    },
+    {
+      "id": "incorrect_sanity_checks",
+      "name": "Incorrect Sanity Checks - Multiple Unlocks Before Lock Time Elapse",
+      "category": "vulnerability",
+      "description": "The bug lies in the unlockToken function, which lacks a check to ensure that block.timestamp is larger than locktime. This allows tokens to be unlocked multiple times before the lock period has elapsed, potentially leading to significant financial loss.",
+      "attack_scenarios": [
+        "VulnerableBank's unlockToken() function saves amount to local variable, then checks if block.timestamp > lockTime and sets locker.amount = 0, but then always transfers the saved amount. Attacker locks tokens for 1 day. Before lock time expires, attacker calls unlockToken() multiple times. Each call transfers the full amount, allowing attacker to withdraw locked tokens multiple times."
+      ],
+      "mitigations": [
+        "Add a require statement to check that the current time is greater than the lock time before the tokens can be unlocked",
+        "Set locker.amount = 0 and locker.hasLockedTokens = false before transferring",
+        "Check lock time before saving amount to local variable"
+      ],
+      "examples": [
+        {
+          "name": "VulnerableBank",
+          "file": "src/test/Incorrect_sanity_checks.sol",
+          "description": "VulnerableBank allows multiple unlocks before lock time expires"
+        }
+      ],
+      "references": [
+        "https://twitter.com/1nf0s3cpt/status/1681492477281468420",
+        "https://blog.decurity.io/dx-protocol-vulnerability-disclosure-bddff88aeb1d"
+      ]
+    },
+    {
+      "id": "transient_storage_misuse",
+      "name": "Transient Storage Misuse",
+      "category": "vulnerability",
+      "description": "Transient storage (introduced in Solidity 0.8.24 with the Cancun network upgrade via EIP-1153) can be manipulated during callback functions, allowing attackers to bypass access controls by injecting arbitrary values. This vulnerability occurs due to development errors in handling transient storage, not due to inherent flaws in the EIP-1153 feature itself.",
+      "attack_scenarios": [
+        "SimpleVault writes vault address to transient storage in mint(). It calls SwapCallback which reads from transient storage to verify caller. Attacker calls SwapCallback directly with manipulated amount value that equals attacker's address when converted. The transient storage contains the attacker's address, bypassing the authorization check."
+      ],
+      "mitigations": [
+        "Properly manage transient storage lifecycle",
+        "Clear transient storage after use",
+        "Don't rely on transient storage for security-critical checks",
+        "Validate all inputs in callback functions"
+      ],
+      "examples": [
+        {
+          "name": "SimpleVault",
+          "file": "src/test/TransientStorageMisuse.t.sol",
+          "description": "SimpleVault misuses transient storage, allowing authorization bypass"
+        }
+      ],
+      "references": [
+        "https://www.coveragelabs.io/blog/post/sir-exploit"
+      ]
+    },
+    {
+      "id": "immunefi_ch1",
+      "name": "Immunefi #spotthebugchallenge 1",
+      "category": "vulnerability",
+      "description": "Incorrect check msg.value, we can mint many NFTs with 1 ETH. HerToken's safeMint() function checks msg.value >= MINT_PRICE inside the loop instead of before the loop, allowing the same 1 ETH to be used for multiple mints.",
+      "attack_scenarios": [
+        "HerToken requires 1 ETH per NFT mint. Attacker calls safeMint() with 1 ETH and amount=10. The function checks msg.value >= MINT_PRICE (1 ETH) inside the loop for each iteration. Since msg.value is 1 ETH and doesn't decrease, all 10 mints pass the check, allowing attacker to mint 10 NFTs with only 1 ETH."
+      ],
+      "mitigations": [
+        "Check msg.value >= MINT_PRICE * amount before the loop",
+        "Deduct payment before minting",
+        "Use a payment tracking variable"
+      ],
+      "examples": [
+        {
+          "name": "HerToken",
+          "file": "src/test/Immunefi_ch1.sol",
+          "description": "HerToken checks msg.value inside loop, allowing multiple mints with single payment"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "immunefi_ch2",
+      "name": "Immunefi #spotthebugchallenge 2",
+      "category": "vulnerability",
+      "description": "Proxy contract has _IMPLEMENTATION_SLOT defined as a regular variable instead of a constant. This causes the storage slot to be stored in a different location, potentially allowing storage collision or incorrect implementation address retrieval.",
+      "attack_scenarios": [
+        "Proxy contract defines _IMPLEMENTATION_SLOT as a regular variable instead of constant. This causes the storage slot calculation to be incorrect. When _setImplementation() is called in constructor with address(0), it may write to the wrong storage slot, and _getImplementation() may read from a different slot, causing incorrect behavior."
+      ],
+      "mitigations": [
+        "Use bytes32 constant for storage slot definitions",
+        "Use EIP-1967 standard storage slots",
+        "Ensure storage slots are calculated at compile time"
+      ],
+      "examples": [
+        {
+          "name": "Proxy",
+          "file": "src/test/Immunefi_ch2.sol",
+          "description": "Proxy uses non-constant storage slot, causing potential storage issues"
+        }
+      ],
+      "references": []
+    },
+    {
+      "id": "sense_finance",
+      "name": "Sense Finance - Access Control",
+      "category": "vulnerability",
+      "description": "Missing access control in onSwap() function. The Sense Finance contract's onSwap() function can be called by anyone, allowing unauthorized swaps and potential manipulation of the protocol.",
+      "attack_scenarios": [
+        "Sense Finance's onSwap() function doesn't have access control. Attacker can call onSwap() directly with manipulated reserve values, causing incorrect swap calculations and potentially draining funds or manipulating prices."
+      ],
+      "mitigations": [
+        "Add access control to onSwap() function",
+        "Ensure only authorized contracts can call onSwap()",
+        "Validate input parameters"
+      ],
+      "examples": [
+        {
+          "name": "Sense Finance",
+          "file": "src/test/SenseFinance_exp.sol",
+          "description": "Sense Finance missing access control in onSwap() function"
+        }
+      ],
+      "references": [
+        "https://medium.com/immunefi/sense-finance-access-control-issue-bugfix-review-32e0c806b1a0"
+      ]
+    },
+    {
+      "id": "uniswap_v3_refund",
+      "name": "UniswapV3 ETH Refund Exploit",
+      "category": "vulnerability",
+      "description": "This exercise is specific UniSwapV3 ETH refund issue. When a user performs a swap with a limit price using exactInputSingle(), if the full input amount isn't used, the remaining ETH stays in the Router contract. A MEV bot can steal the remaining ETH by calling the public refundETH() function.",
+      "attack_scenarios": [
+        "User sells 100 ETH to buy USDC with a limit price. Only 50 ETH is used in the swap. The remaining 50 ETH stays in the Router contract. A MEV bot monitors the mempool, sees the transaction, and immediately calls refundETH() to claim the 50 ETH before the user can."
+      ],
+      "mitigations": [
+        "Router should automatically refund unused ETH to the user",
+        "Make refundETH() only callable by the original user",
+        "Use a mapping to track pending refunds per user"
+      ],
+      "examples": [
+        {
+          "name": "UniswapV3 Router",
+          "file": "src/test/UniswapV3ETHRefundExploit.sol",
+          "description": "UniswapV3 Router doesn't automatically refund unused ETH, allowing MEV bots to steal it"
+        }
+      ],
+      "references": [
+        "https://github.com/Jeiwan/uniswapv3-unrefunded-eth-poc",
+        "https://jeiwan.net/posts/public-bug-report-uniswap-swaprouter/"
+      ]
+    }
+  ],
+  "summary": {
+    "total_vulnerabilities": 48,
+    "categories": {
+      "vulnerability": 48
+    }
+  }
+}
